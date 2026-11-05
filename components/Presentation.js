@@ -1,4 +1,4 @@
-```javascript
+javascript
 'use client';
 
 import { Suspense, useEffect, useState, useRef } from 'react';
@@ -6,7 +6,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { useGLTF, Html, useProgress } from '@react-three/drei';
 import * as THREE from 'three';
 
-// ИСПРАВЛЕНО: slides.js находится в корне проекта
+// slides.js находится в корневой папке проекта
 import {
   slides,
   cameraPoints,
@@ -20,7 +20,8 @@ const FLY_MS = 1900;
 const VEIL_MS = 1200;
 
 const cloudStart = slides.findIndex((s) => s.scene === 'clouds');
-const sceneOf = (n) => slides[n].scene || 'room';
+
+const sceneOf = (n) => slides[n]?.scene || 'room';
 
 function Room({ visible }) {
   const { scene } = useGLTF('/room.glb');
@@ -34,11 +35,13 @@ function Clouds({ visible }) {
   return (
     <group visible={visible}>
       <ambientLight intensity={1.4} color="#ffffff" />
+
       <directionalLight
         position={[160, 90, 60]}
         intensity={2.2}
         color="#fff3df"
       />
+
       <primitive object={scene} />
     </group>
   );
@@ -52,6 +55,8 @@ function Rig({ pose, from, rate = 1.6, sway = 0 }) {
   const init = useRef(false);
 
   useFrame((state, dt) => {
+    if (!pose?.pos || !pose?.look) return;
+
     const target = new THREE.Vector3(...pose.pos);
     const lt = new THREE.Vector3(...pose.look);
 
@@ -100,9 +105,13 @@ function Loader() {
 function Panel({ s, active }) {
   if (s.layout === 'empty') return null;
 
-  const cls = `panel ${s.layout === 'center' ? 'center' : ''} ${
+  const cls = `panel ${
+    s.layout === 'center' ? 'center' : ''
+  } ${
     s.scene === 'clouds' ? 'sky' : ''
-  } ${active ? '' : 'hidden'}`;
+  } ${
+    active ? '' : 'hidden'
+  }`;
 
   return (
     <div className={cls}>
@@ -115,10 +124,11 @@ function Panel({ s, active }) {
       ) : (
         <>
           {s.era && <div className="era">{s.era}</div>}
+
           <h2>{s.title}</h2>
 
           <ul>
-            {s.items.map(([b, t]) => (
+            {(s.items || []).map(([b, t]) => (
               <li key={b}>
                 <b>{b}:</b> {t}
               </li>
@@ -141,17 +151,19 @@ export default function Presentation() {
 
   const rewindingRef = useRef(false);
   const iRef = useRef(0);
+  const sceneRef = useRef('room');
+
   iRef.current = i;
 
-  const sceneRef = useRef('room');
   const last = slides.length - 1;
 
   const go = (n) => {
     if (rewindingRef.current) return;
 
-    setI((c) =>
-      Math.max(0, Math.min(last, typeof n === 'function' ? n(c) : n))
-    );
+    setI((current) => {
+      const next = typeof n === 'function' ? n(current) : n;
+      return Math.max(0, Math.min(last, next));
+    });
   };
 
   const back = () => {
@@ -161,18 +173,23 @@ export default function Presentation() {
       rewindingRef.current = true;
       setRewinding(true);
     } else {
-      go((c) => c - 1);
+      go((current) => current - 1);
     }
   };
 
+  // Debug camera и управление клавиатурой
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
 
     if (q.get('cam')) {
-      setDebug({
-        pos: q.get('cam').split(',').map(Number),
-        look: q.get('look').split(',').map(Number)
-      });
+      const lookValue = q.get('look');
+
+      if (lookValue) {
+        setDebug({
+          pos: q.get('cam').split(',').map(Number),
+          look: lookValue.split(',').map(Number)
+        });
+      }
 
       const sc = q.get('scene') === 'clouds' ? 'clouds' : 'room';
 
@@ -183,7 +200,7 @@ export default function Presentation() {
     const onKey = (e) => {
       if (['ArrowRight', 'ArrowDown', 'PageDown', ' '].includes(e.key)) {
         e.preventDefault();
-        go((c) => c + 1);
+        go((current) => current + 1);
       }
 
       if (['ArrowLeft', 'ArrowUp', 'PageUp'].includes(e.key)) {
@@ -194,11 +211,14 @@ export default function Presentation() {
 
     window.addEventListener('keydown', onKey);
 
-    return () => window.removeEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+    };
   }, []);
 
   const want = sceneOf(i);
 
+  // Переход между комнатой и облаками
   useEffect(() => {
     if (debug) return;
 
@@ -210,29 +230,33 @@ export default function Presentation() {
 
     setBusy(true);
 
-    const fly = FLY_MS;
-
-    const t1 = setTimeout(() => setVeil(true), fly);
+    const t1 = setTimeout(() => {
+      setVeil(true);
+    }, FLY_MS);
 
     const t2 = setTimeout(() => {
       sceneRef.current = want;
       setEntry(want === 'room' ? paintingPoint : null);
       setScene(want);
-    }, fly + VEIL_MS + 100);
+    }, FLY_MS + VEIL_MS + 100);
 
-    const t3 = setTimeout(
-      () => setVeil(false),
-      fly + VEIL_MS + 250
-    );
+    const t3 = setTimeout(() => {
+      setVeil(false);
+    }, FLY_MS + VEIL_MS + 250);
 
-    const t4 = setTimeout(
-      () => setBusy(false),
-      fly + VEIL_MS * 2 + 400
-    );
+    const t4 = setTimeout(() => {
+      setBusy(false);
+    }, FLY_MS + VEIL_MS * 2 + 400);
 
-    return () => [t1, t2, t3, t4].forEach(clearTimeout);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      clearTimeout(t4);
+    };
   }, [want, debug]);
 
+  // Автоматическая перемотка к первому слайду
   useEffect(() => {
     if (!rewinding || busy) return;
 
@@ -242,17 +266,26 @@ export default function Presentation() {
       return;
     }
 
-    const t = setTimeout(() => setI((c) => c - 1), 600);
+    const timer = setTimeout(() => {
+      setI((current) => current - 1);
+    }, 600);
 
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [rewinding, busy, i]);
 
-  let pose, from, rate = 3, sway = 0;
+  // Положение камеры
+  let pose;
+  let from;
+  let rate = 3;
+  let sway = 0;
 
   if (debug) {
     pose = debug;
   } else if (scene === 'room') {
-    pose = want === 'room' ? cameraPoints[i] : paintingPoint;
+    pose = want === 'room'
+      ? cameraPoints[i]
+      : paintingPoint;
+
     from = entry || undefined;
   } else {
     pose = want === 'clouds'
@@ -288,7 +321,9 @@ export default function Presentation() {
             <color attach="background" args={['#000000']} />
           )}
 
-          {inClouds && <fog attach="fog" args={[SKY, 70, 200]} />}
+          {inClouds && (
+            <fog attach="fog" args={[SKY, 70, 200]} />
+          )}
 
           <Suspense fallback={<Loader />}>
             <Room visible={!inClouds} />
@@ -321,7 +356,10 @@ export default function Presentation() {
 
       {!debug && (
         <div className="nav">
-          <button onClick={back} disabled={i === 0 || rewinding}>
+          <button
+            onClick={back}
+            disabled={i === 0 || rewinding}
+          >
             ←
           </button>
 
@@ -335,7 +373,10 @@ export default function Presentation() {
             ))}
           </div>
 
-          <button onClick={() => go(i + 1)} disabled={i === last}>
+          <button
+            onClick={() => go(i + 1)}
+            disabled={i === last}
+          >
             →
           </button>
         </div>
@@ -346,4 +387,3 @@ export default function Presentation() {
 
 useGLTF.preload('/room.glb');
 useGLTF.preload('/cloudy_mountain.glb');
-```
